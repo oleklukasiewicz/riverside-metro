@@ -16,6 +16,17 @@
   let pipWindow = $state<Window | null>(null);
   let isPipActive = $state(false);
 
+  var gpsAapi = "/api/routeHub";
+
+  onMount(() => {
+    if (
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    ) {
+      gpsAapi = "https://localhost:7194/routeHub";
+    }
+  });
+
   let routeData = $state({
     routeName: "",
     stations: [] as { id: string; name: string }[],
@@ -67,15 +78,23 @@
       tags: cp.tags,
     }));
 
-    routeData.lineColor = extractLineColor(data.route.tags);
+    routeData.lineColor = extractLineColor(
+      data.route.tags.filter((tag: any) => tag.name.includes("->")),
+    );
     routeData.routeName = data.route.name || "M1";
-    routeData.currentFeatureId = data.currentFeature ? data.currentFeature.id : null;
+    routeData.currentFeatureId = data.currentFeature
+      ? data.currentFeature.id
+      : null;
     routeData.headingToId = data.headingTo ? data.headingTo.id : null;
     routeData.lastLeftFeatureId = data.lastLeftFeatureId || null;
   }
 
   async function startTracking() {
-    if (!targetUsername.trim() || connection.state !== signalR.HubConnectionState.Connected) return;
+    if (
+      !targetUsername.trim() ||
+      connection.state !== signalR.HubConnectionState.Connected
+    )
+      return;
 
     if (trackedUsername) {
       await connection.invoke("UntrackUser", trackedUsername);
@@ -94,21 +113,24 @@
     }
 
     if (!("documentPictureInPicture" in window)) {
-      alert("Twoja przeglądarka nie obsługuje Document Picture-in-Picture API.");
+      alert("Picture in picture is not supported in this browser.");
       return;
     }
 
     try {
+      // @ts-ignore
       pipWindow = await window.documentPictureInPicture.requestWindow({
-        width: 800,
-        height: 310,
+        width: 500,
+        height: 320,
       });
 
       if (!pipWindow) return;
 
       [...document.styleSheets].forEach((styleSheet) => {
         try {
-          const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join("");
+          const cssRules = [...styleSheet.cssRules]
+            .map((rule) => rule.cssText)
+            .join("");
           const style = document.createElement("style");
           style.textContent = cssRules;
           pipWindow?.document.head.appendChild(style);
@@ -123,7 +145,8 @@
 
       pipWindow.document.body.appendChild(metroContainer);
       pipWindow.document.body.style.margin = "0";
-      pipWindow.document.body.style.backgroundColor = "#eeeeee";
+      pipWindow.document.body.style.display = "flex";
+      pipWindow.document.body.style.minHeight = "100vh";
       isPipActive = true;
 
       pipWindow.addEventListener("pagehide", () => {
@@ -141,7 +164,7 @@
 
   onMount(async () => {
     connection = new signalR.HubConnectionBuilder()
-      .withUrl("/api/routeHub")
+      .withUrl(gpsAapi)
       .withAutomaticReconnect()
       .build();
 
@@ -214,9 +237,8 @@
     {/if}
   </div>
 
-  <!-- Wrapper na kontener, który umożliwia powrót elementu DOM po zamknięciu PiP -->
   <div id="metro-route-wrapper">
-    <div bind:this={metroContainer}>
+    <div bind:this={metroContainer} id="metro-route-container">
       <MetroRoute
         routeName={routeData.routeName}
         stations={routeData.stations}

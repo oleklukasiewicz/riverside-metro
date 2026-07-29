@@ -10,6 +10,12 @@
     tags?: TagItem[] | null;
   }
 
+  interface DistrictGroup {
+    name: string;
+    startIndex: number;
+    count: number;
+  }
+
   let {
     routeName = "",
     stations = [] as StationItem[],
@@ -30,11 +36,16 @@
       () => (isAnnouncementActive = false),
       annoucementDuration,
     );
-    return () => clearTimeout(timer);
+   return () => clearTimeout(timer);
   });
 
   let idxMap = $derived(new Map(stations.map((s, i) => [s.id, i])));
   const getIdx = (id: string | null) => (id ? (idxMap.get(id) ?? -1) : -1);
+
+  const getDistrictName = (station: StationItem): string | null => {
+    const tag = station.tags?.find((t) => t.name?.startsWith("d:"));
+    return tag?.name ? tag.name.replace(/^d:/, "").trim() : null;
+  };
 
   let [currentIdx, nextIdx, lastLeftIdx] = $derived([
     getIdx(currentFeatureId),
@@ -55,8 +66,15 @@
           : 0,
   );
   let activeTags = $derived(
-    (mode === 1 ? currentStation : mode === 2 ? headingToStation : null)
-      ?.tags ?? [],
+    (mode === 1 ? currentStation : mode === 2 ? headingToStation : null)?.tags
+      ?.filter((tag: any) => tag?.name?.includes("->"))
+      .map((tag: any) => {
+        return {
+          name: tag.name.replace(/->/g, "").trim(),
+          backgroundColor: tag.backgroundColor,
+          textColor: tag.textColor,
+        };
+      }) ?? [],
   );
 
   let isForward = $derived(
@@ -91,6 +109,33 @@
   );
   let fullRouteText = $derived(upcomingStations.map((s) => s.name).join(" - "));
   let terminalStation = $derived(upcomingStations.at(-1)?.name ?? "");
+
+  let districtGroups = $derived.by(() => {
+    const groups: DistrictGroup[] = [];
+    if (displayStations.length === 0) return groups;
+
+    let currentDistrict = getDistrictName(displayStations[0]) || "";
+    let startIndex = 0;
+    let count = 1;
+
+    for (let i = 1; i < displayStations.length; i++) {
+      const dName = getDistrictName(displayStations[i]) || "";
+      if (dName === currentDistrict) {
+        count++;
+      } else {
+        if (currentDistrict) {
+          groups.push({ name: currentDistrict, startIndex, count });
+        }
+        currentDistrict = dName;
+        startIndex = i;
+        count = 1;
+      }
+    }
+    if (currentDistrict) {
+      groups.push({ name: currentDistrict, startIndex, count });
+    }
+    return groups;
+  });
 </script>
 
 <div class="metro-route">
@@ -165,6 +210,23 @@
             <div class="node"><div class="inner-dot"></div></div>
           </div>
         {/each}
+
+        <div class="districts-bar">
+          {#each districtGroups as group}
+            {@const isFirstStation = group.startIndex === 0}
+            {@const isLastStation =
+              group.startIndex + group.count === displayStations.length}
+
+            <div
+              class="district-block"
+              class:is-first={isFirstStation}
+              class:is-last={isLastStation}
+              style="left: calc((100% / {displayStations.length}) * {group.startIndex}); width: calc((100% / {displayStations.length}) * {group.count});"
+            >
+              <span class="district-title">{group.name}</span>
+            </div>
+          {/each}
+        </div>
       </div>
     </div>
   </div>
