@@ -1,0 +1,253 @@
+@font-face {
+  font-family: "DMDSmall";
+  src: url("/font/DMDSmall.ttf") format("truetype");
+}
+@font-face {
+  font-family: minecraft-micro;
+  src: url("/font/minecraft-micro.ttf") format("truetype");
+}
+@font-face {
+  font-family: minecraft-simple;
+  src: url("/font/minecraftSimple.woff2") format("truetype");
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.metro-route {
+  color: var(--color-theme-font);
+  background-color: var(--color-theme-D1);
+  font-family: "DMDSmall", sans-serif;
+  image-rendering: pixelated;
+  font-size: 32px;
+  overflow: hidden;
+
+  .header {
+    padding: 8px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    border-bottom: 2px solid var(--color-theme-D6);;
+
+    .route-name {
+      aspect-ratio: 1 / 1;
+      font-size: 52px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      span {
+        transform: translate(2px, -3px);
+      }
+    }
+
+    .route-info {
+      padding: 0 12px;
+      margin-top: -7px;
+      line-height: 1;
+
+      .mode {
+        display: flex;
+        flex-direction: column;
+
+        .title {
+          font-size: 31px;
+        }
+        .content {
+          font-size: 25px;
+          font-family: minecraft-simple;
+        }
+      }
+
+      .route-stats {
+        width: 100%;
+        overflow: hidden;
+
+        .route-checkpoints {
+          display: flex;
+          align-items: center;
+          font-size: 25px;
+          font-family: minecraft-simple;
+
+          .route-label {
+            margin-right: 8px;
+            white-space: nowrap;
+            flex-shrink: 0;
+          }
+
+          .ticker-wrap {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            display: flex;
+            margin-left: 8px;
+
+            .ticker-content {
+              display: flex;
+              white-space: nowrap;
+              width: max-content;
+              animation: marquee 15s linear infinite;
+
+              span {
+                padding-right: 16px;
+              }
+            }
+
+            &:hover .ticker-content {
+              animation-play-state: paused;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  .transfers {
+    height: 28px;
+    display: flex;
+    gap: 4px;
+    padding: 8px;
+    border-bottom: 2px solid var(--color-theme-D6);
+
+    span {
+      transform: translateY(-3px);
+    }
+
+    .transfer-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      font-size: 32px;
+      line-height: 1;
+      text-transform: uppercase;
+
+      span {
+        transform: translate(1px, -2px);
+      }
+    }
+  }
+
+  .route .metro-display {
+    width: 100%;
+    background-color: var(--color-theme-D1);
+    padding: 120px 40px 50px 0;
+    box-sizing: border-box;
+    .line-map {
+      display: flex;
+      position: relative;
+      width: 100%;
+
+      &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: calc(100% / var(--total-stations, 6) / 2);
+        right: calc(100% / var(--total-stations, 6) / 2);
+        height: 6px;
+        background-color: var(--line-color);
+        transform: translateY(-50%);
+        z-index: 1;
+      }
+
+      .station-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        height: 24px;
+        --node-color: var(--line-color);
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: -50%;
+          width: 100%;
+          height: 6px;
+          background-color: var(--color-hover-L1);
+          transform: translateY(-50%);
+          z-index: 2;
+          display: none;
+        }
+
+        &:first-child::after {
+          display: none !important;
+        }
+        &.is-passed::after {
+          display: block;
+        }
+
+        .node-cutout {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 22px;
+          height: 22px;
+          background-color: var(--color-theme-D1);
+          z-index: 3;
+        }
+
+        .node {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 14px;
+          height: 14px;
+          background-color: var(--color-theme-D1);
+          border: 2px solid var(--node-color);
+          z-index: 5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          .inner-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--node-color);
+          }
+        }
+
+        .station-name {
+          position: absolute;
+          bottom: 25px;
+          left: 55%;
+          white-space: nowrap;
+          transform: rotate(-45deg);
+          transform-origin: bottom left;
+          font-size: 32px;
+          font-family: DMDSmall, sans-serif;
+        }
+
+        &.is-terminal .station-name {
+          font-size: 40px;
+        }
+
+        &.is-passed {
+          --node-color: var(--color-hover-L1);
+          .station-name {
+            color: var( --color-hover-L1);
+          }
+        }
+
+        &.is-current {
+          --node-color: var(--line-color);
+          .station-name {
+            color: var(--line-color);
+          }
+        }
+      }
+    }
+  }
+}
