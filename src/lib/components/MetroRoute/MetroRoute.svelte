@@ -1,14 +1,5 @@
 <script lang="ts">
-  interface TagItem {
-    name?: string;
-    backgroundColor?: string;
-    textColor?: string;
-  }
-  interface StationItem {
-    id: string;
-    name: string;
-    tags?: TagItem[] | null;
-  }
+  import type { Feature, Position, Tag } from "../../../models/PlayerRoute";
 
   interface DistrictGroup {
     name: string;
@@ -18,12 +9,20 @@
 
   let {
     routeName = "",
-    stations = [] as StationItem[],
+    stations = [] as Feature[],
     currentFeatureId = null as string | null,
     headingToId = null as string | null,
     lastLeftFeatureId = null as string | null,
+    playerPosition = null as Position | null,
     lineColor = "#666666",
     annoucementDuration = 5000,
+    showDistricts = true,
+    showTime = true,
+    districtPrefix = "d:",
+    transferPrefix = "->",
+    timePrefix = "t:",
+    speed = 11,
+    dwellTimeSeconds = 5,
   } = $props();
 
   let isAnnouncementActive = $state(false);
@@ -36,15 +35,62 @@
       () => (isAnnouncementActive = false),
       annoucementDuration,
     );
-   return () => clearTimeout(timer);
+    return () => clearTimeout(timer);
   });
+
+  function getPos(obj: Feature | Position | null): Position | null {
+    if (!obj) return null;
+    if ("x" in obj) return obj as Position;
+    if (obj.centerPosition) return obj.centerPosition;
+    if (
+      typeof obj.centerX === "number" &&
+      typeof obj.centerY === "number" &&
+      typeof obj.centerZ === "number"
+    ) {
+      return { x: obj.centerX, y: obj.centerY, z: obj.centerZ };
+    }
+    return null;
+  }
+
+  function getDistance(
+    a: Feature | Position | null,
+    b: Feature | Position | null,
+  ): number {
+    const p1 = getPos(a);
+    const p2 = getPos(b);
+    if (!p1 || !p2) return 0;
+    return Math.sqrt(
+      (p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2 + (p2.z - p1.z) ** 2,
+    );
+  }
 
   let idxMap = $derived(new Map(stations.map((s, i) => [s.id, i])));
   const getIdx = (id: string | null) => (id ? (idxMap.get(id) ?? -1) : -1);
 
-  const getDistrictName = (station: StationItem): string | null => {
-    const tag = station.tags?.find((t) => t.name?.startsWith("d:"));
-    return tag?.name ? tag.name.replace(/^d:/, "").trim() : null;
+  const getTagString = (tag: Tag | string): string => {
+    return typeof tag === "string" ? tag : (tag.name ?? "");
+  };
+
+  const getDistrictName = (station: Feature): string | null => {
+    const tag = station.tags?.find((t) =>
+      getTagString(t).startsWith(districtPrefix),
+    );
+    return tag
+      ? getTagString(tag)
+          .replace(new RegExp(`^${districtPrefix}`), "")
+          .trim()
+      : null;
+  };
+
+  const getManualTime = (station: Feature): string | null => {
+    const tag = station.tags?.find((t) =>
+      getTagString(t).startsWith(timePrefix),
+    );
+    if (!tag) return null;
+    const val = getTagString(tag)
+      .replace(new RegExp(`^${timePrefix}`), "")
+      .trim();
+    return /^\d+$/.test(val) ? `${val}'` : val;
   };
 
   let [currentIdx, nextIdx, lastLeftIdx] = $derived([
@@ -65,14 +111,17 @@
           ? 2
           : 0,
   );
+
   let activeTags = $derived(
     (mode === 1 ? currentStation : mode === 2 ? headingToStation : null)?.tags
-      ?.filter((tag: any) => tag?.name?.includes("->"))
-      .map((tag: any) => {
+      ?.filter((tag) => getTagString(tag).includes(transferPrefix))
+      .map((tag) => {
+        const str = getTagString(tag);
         return {
-          name: tag.name.replace(/->/g, "").trim(),
-          backgroundColor: tag.backgroundColor,
-          textColor: tag.textColor,
+          name: str.replace(new RegExp(`${transferPrefix}`, "g"), "").trim(),
+          backgroundColor:
+            typeof tag === "object" ? tag.backgroundColor : undefined,
+          textColor: typeof tag === "object" ? tag.textColor : undefined,
         };
       }) ?? [],
   );
@@ -109,6 +158,47 @@
   );
   let fullRouteText = $derived(upcomingStations.map((s) => s.name).join(" - "));
   let terminalStation = $derived(upcomingStations.at(-1)?.name ?? "");
+
+  let calculatedTimes = $derived.by(() => {
+    const times = new Map<string, string>();
+    if (!showTime) return times;
+
+    let accumulatedSeconds = 0;
+    let prevPoint: Feature | Position | null = playerPosition;
+
+    for (const station of displayStations) {
+      const manualTime = getManualTime(station);
+      if (manualTime) {
+        times.set(station.id, manualTime);
+        continue;
+      }
+
+      if (isPassed(station.id) && station.id !== currentFeatureId) {
+        continue;
+      }
+
+      if (station.id === currentFeatureId) {
+        times.set(station.id, "0''");
+        prevPoint = station;
+        accumulatedSeconds = 0;
+        continue;
+      }
+
+      const dist = getDistance(prevPoint, station);
+      const isFirstSegmentFromPlayer = prevPoint === playerPosition;
+
+      accumulatedSeconds +=
+        dist / Math.max(speed, 1) +
+        (!isFirstSegmentFromPlayer ? dwellTimeSeconds : 0);
+
+      const mins = Math.floor(accumulatedSeconds);
+      times.set(station.id, `${mins}''`);
+
+      prevPoint = station;
+    }
+
+    return times;
+  });
 
   let districtGroups = $derived.by(() => {
     const groups: DistrictGroup[] = [];
@@ -198,6 +288,7 @@
     >
       <div class="line-map">
         {#each displayStations as station, index}
+          {@const stationTime = calculatedTimes.get(station.id)}
           <div
             class="station-item"
             class:is-passed={isPassed(station.id)}
@@ -208,25 +299,33 @@
             <div class="station-name">{station.name}</div>
             <div class="node-cutout"></div>
             <div class="node"><div class="inner-dot"></div></div>
+
+            <div class="station-time">
+              {#if showTime && stationTime && (!isPassed(station.id) || station.id === currentFeatureId)}
+                {stationTime}
+              {/if}
+            </div>
           </div>
         {/each}
 
-        <div class="districts-bar">
-          {#each districtGroups as group}
-            {@const isFirstStation = group.startIndex === 0}
-            {@const isLastStation =
-              group.startIndex + group.count === displayStations.length}
+        {#if showDistricts}
+          <div class="districts-bar">
+            {#each districtGroups as group}
+              {@const isFirstStation = group.startIndex === 0}
+              {@const isLastStation =
+                group.startIndex + group.count === displayStations.length}
 
-            <div
-              class="district-block"
-              class:is-first={isFirstStation}
-              class:is-last={isLastStation}
-              style="left: calc((100% / {displayStations.length}) * {group.startIndex}); width: calc((100% / {displayStations.length}) * {group.count});"
-            >
-              <span class="district-title">{group.name}</span>
-            </div>
-          {/each}
-        </div>
+              <div
+                class="district-block"
+                class:is-first={isFirstStation}
+                class:is-last={isLastStation}
+                style="left: calc((100% / {displayStations.length}) * {group.startIndex}); width: calc((100% / {displayStations.length}) * {group.count});"
+              >
+                <span class="district-title">{group.name}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     </div>
   </div>

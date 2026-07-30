@@ -7,11 +7,15 @@ export interface Position {
   z: number;
   time?: Date | string | null;
 }
-
+export interface Tag {
+  name?: string;
+  backgroundColor?: string;
+  textColor?: string;
+}
 export interface Feature {
   id: string;
   name: string;
-  tags: string[];
+  tags: Tag[];
 
   startPosition?: Position | null;
   endPosition?: Position | null;

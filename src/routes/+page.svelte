@@ -2,7 +2,12 @@
   import { onMount, onDestroy } from "svelte";
   import * as signalR from "@microsoft/signalr";
   import MetroRoute from "$lib/components/MetroRoute/MetroRoute.svelte";
-  import type { PlayerRoute } from "../models/PlayerRoute";
+  import type {
+    PlayerRoute,
+    Feature,
+    Position,
+    PlayerPosition,
+  } from "../models/PlayerRoute";
   import TextBox from "$lib/components/TextBox/TextBox.svelte";
   import Button from "$lib/components/Button/Button.svelte";
 
@@ -11,54 +16,38 @@
   let targetUsername = $state("");
   let trackedUsername = $state("");
 
-  // Referencja do kontenera z MetroRoute
   let metroContainer = $state<HTMLElement | null>(null);
   let pipWindow = $state<Window | null>(null);
   let isPipActive = $state(false);
 
-  var gpsAapi = "/api/routeHub";
-
-  onMount(() => {
-    if (
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1"
-    ) {
-      gpsAapi = "https://localhost:7194/routeHub";
-    }
-  });
+  let gpsAapi = "/api/routeHub";
 
   let routeData = $state({
     routeName: "",
-    stations: [] as { id: string; name: string }[],
+    stations: [] as Feature[],
     currentFeatureId: null as string | null,
     headingToId: null as string | null,
     lastLeftFeatureId: null as string | null,
+    playerPosition: null as Position | null,
     lineColor: "#666666",
   });
 
-  function extractLineColor(tags: any): string {
-    if (!tags) return "#666666";
-    if (typeof tags === "object" && !Array.isArray(tags)) {
-      return tags.backgroundColor || "#666666";
-    }
-    if (Array.isArray(tags) && tags.length > 0) {
-      return tags[0]?.backgroundColor || "#666666";
-    }
-    return "#666666";
+  function extractLineColor(tags: any[]): string {
+    if (!Array.isArray(tags)) return "#666666";
+    const transferTag = tags.find((t) =>
+      (typeof t === "string" ? t : t.name)?.includes("->"),
+    );
+    return typeof transferTag === "object"
+      ? transferTag?.backgroundColor || "#666666"
+      : "#666666";
   }
 
   function playAudioFile(filename: string): Promise<void> {
     return new Promise((resolve) => {
       const audio = new Audio(`/audio/${filename}`);
       audio.onended = () => resolve();
-      audio.onerror = (err) => {
-        console.warn(`Nie udało się odtworzyć pliku: /audio/${filename}`, err);
-        resolve();
-      };
-      audio.play().catch((err) => {
-        console.warn("Wymagana interakcja użytkownika przed dźwiękiem:", err);
-        resolve();
-      });
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
     });
   }
 
@@ -70,29 +59,21 @@
 
   function updateRouteState(rawPayload: any) {
     const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-    if (!data || !data.route) return;
+    if (!data?.route) return;
 
-    routeData.stations = (data.route.checkpoints || []).map((cp) => ({
-      id: cp.id,
-      name: cp.name,
-      tags: cp.tags,
-    }));
-
-    routeData.lineColor = extractLineColor(
-      data.route.tags.filter((tag: any) => tag.name.includes("->")),
-    );
+    routeData.stations = data.route.checkpoints || [];
     routeData.routeName = data.route.name || "M1";
-    routeData.currentFeatureId = data.currentFeature
-      ? data.currentFeature.id
-      : null;
-    routeData.headingToId = data.headingTo ? data.headingTo.id : null;
-    routeData.lastLeftFeatureId = data.lastLeftFeatureId || null;
+    routeData.lineColor = extractLineColor(data.route.tags || []);
+    routeData.currentFeatureId = data.currentFeature?.id ?? null;
+    routeData.headingToId = data.headingTo?.id ?? null;
+    routeData.lastLeftFeatureId = data.lastLeftFeatureId ?? null;
+    routeData.playerPosition = data.position?.actualPosition ?? null;
   }
 
   async function startTracking() {
     if (
       !targetUsername.trim() ||
-      connection.state !== signalR.HubConnectionState.Connected
+      connection?.state !== signalR.HubConnectionState.Connected
     )
       return;
 
@@ -134,7 +115,7 @@
           const style = document.createElement("style");
           style.textContent = cssRules;
           pipWindow?.document.head.appendChild(style);
-        } catch (e) {
+        } catch {
           const link = document.createElement("link");
           link.rel = "stylesheet";
           link.type = styleSheet.type;
@@ -158,11 +139,18 @@
         isPipActive = false;
       });
     } catch (err) {
-      console.error("Błąd otwierania Picture-in-Picture:", err);
+      console.error("Błąd Picture-in-Picture:", err);
     }
   }
 
   onMount(async () => {
+    if (
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    ) {
+      gpsAapi = "https://localhost:7194/routeHub";
+    }
+
     connection = new signalR.HubConnectionBuilder()
       .withUrl(gpsAapi)
       .withAutomaticReconnect()
@@ -171,25 +159,29 @@
     connection.on("OnStation", (rawPayload) => {
       const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
       updateRouteState(data);
-      if (data?.currentFeature) {
-        playAnnouncement("stacja.mp3", data.currentFeature.name);
-      }
+      // if (data?.currentFeature) {
+      //   playAnnouncement("stacja.mp3", data.currentFeature.name);
+      // }
     });
 
     connection.on("OnNextStation", (rawPayload) => {
       const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
       updateRouteState(data);
-      if (data?.headingTo) {
-        playAnnouncement("nastepna_stacja.mp3", data.headingTo.name);
-      }
+      // if (data?.headingTo) {
+      //   playAnnouncement("nastepna_stacja.mp3", data.headingTo.name);
+      // }
     });
 
     connection.on("OnRouteLeave", (rawPayload) => {
-      if (routeData.routeName == rawPayload?.playerRoute?.route?.name) {
+      if (routeData.routeName === rawPayload?.playerRoute?.route?.name) {
         routeData.currentFeatureId = null;
         routeData.headingToId = null;
         routeData.lastLeftFeatureId = null;
       }
+    });
+    connection.on("OnPositionUpdate", (rawPayload) => {
+      const data: PlayerPosition = rawPayload?.playerPosition ?? rawPayload;
+      routeData.playerPosition = data?.actualPosition ?? null;
     });
 
     try {
@@ -202,12 +194,8 @@
   });
 
   onDestroy(() => {
-    if (pipWindow) {
-      pipWindow.close();
-    }
-    if (connection) {
-      connection.stop();
-    }
+    pipWindow?.close();
+    connection?.stop();
   });
 </script>
 
@@ -215,13 +203,11 @@
   <p><strong>Status:</strong> {status}</p>
 
   <div>
-    <div style="display: flex; gap: 0.5rem; margin-bottom:12px;">
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 12px;">
       <TextBox
         bind:value={targetUsername}
         placeholder="Username"
-        oninput={() => {
-          targetUsername = targetUsername.trim();
-        }}
+        oninput={() => (targetUsername = targetUsername.trim())}
       />
       <Button onclick={startTracking} disabled={!targetUsername.trim()}>
         Track
@@ -245,6 +231,7 @@
         currentFeatureId={routeData.currentFeatureId}
         headingToId={routeData.headingToId}
         lastLeftFeatureId={routeData.lastLeftFeatureId}
+        playerPosition={routeData.playerPosition}
         lineColor={routeData.lineColor}
       />
     </div>
