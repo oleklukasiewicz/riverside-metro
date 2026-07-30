@@ -12,12 +12,8 @@
 }
 
 @keyframes marquee {
-  0% {
-    transform: translate3d(0, 0, 0);
-  }
-  100% {
-    transform: translate3d(-50%, 0, 0);
-  }
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
 }
 
 .metro-route {
@@ -34,12 +30,12 @@
   .header {
     padding: 8px;
     display: grid;
-    overflow: hidden;
     grid-template-columns: auto 1fr;
     border-bottom: 2px solid var(--color-theme-D6);
+    overflow: hidden;
 
     .route-name {
-      aspect-ratio: 1 / 1;
+      aspect-ratio: 1;
       font-size: 52px;
       line-height: 1;
       display: flex;
@@ -92,12 +88,10 @@
             flex: 1;
             min-width: 0;
             overflow: hidden;
-            position: relative;
 
             .ticker-content {
               display: inline-flex;
               white-space: nowrap;
-              width: max-content;
 
               span {
                 display: inline-block;
@@ -127,7 +121,7 @@
     padding: 8px;
     border-bottom: 2px solid var(--color-theme-D6);
 
-    span {
+    > span {
       transform: translateY(-3px);
     }
 
@@ -137,7 +131,6 @@
       justify-content: center;
       width: 28px;
       height: 28px;
-      font-size: 32px;
       line-height: 1;
       text-transform: uppercase;
 
@@ -178,7 +171,6 @@
         .station-item {
           flex: 1;
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
           position: relative;
@@ -201,8 +193,33 @@
           &:first-child::after {
             display: none !important;
           }
-          &.is-passed::after {
-            display: block;
+
+          &.is-passed {
+            --node-color: var(--color-hover-L1);
+
+            &::after {
+              display: block;
+            }
+
+            .station-name,
+            .station-time {
+              color: var(--color-hover-L1);
+            }
+          }
+
+          &.is-current {
+            --node-color: var(--line-color);
+
+            .station-name {
+              color: var(--line-color);
+            }
+            .station-time {
+              color: var(--color-theme-font);
+            }
+          }
+
+          &.is-terminal .station-name {
+            font-size: 40px;
           }
 
           .node-cutout {
@@ -244,8 +261,6 @@
             white-space: nowrap;
             transform: rotate(-45deg);
             transform-origin: bottom left;
-            font-size: 32px;
-            font-family: DMDSmall, sans-serif;
           }
 
           .station-time {
@@ -256,37 +271,11 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            width: max-content;
-            min-width: 40px;
-            text-align: center;
             white-space: nowrap;
-            font-size: 32px;
-            font-family: DMDSmall, sans-serif;
+            min-width: 40px;
             color: var(--color-hover-L1);
             z-index: 6;
             pointer-events: none;
-          }
-
-          &.is-terminal .station-name {
-            font-size: 40px;
-          }
-
-          &.is-passed {
-            --node-color: var(--color-hover-L1);
-            .station-name,
-            .station-time {
-              color: var(--color-hover-L1);
-            }
-          }
-
-          &.is-current {
-            --node-color: var(--line-color);
-            .station-name {
-              color: var(--line-color);
-            }
-            .station-time {
-              color: var(--color-theme-font);
-            }
           }
         }
 
@@ -302,6 +291,7 @@
             height: 100%;
             padding: 0 1px;
             box-sizing: border-box;
+
             &.is-first {
               padding-left: calc((100% / var(--total-stations, 6) / 2) - 10px);
             }
@@ -317,13 +307,11 @@
               height: 100%;
               background-color: var(--color-hover);
               color: var(--color-hover-L1);
-              font-family: DMDSmall, sans-serif;
-              font-size: 32px;
               text-transform: uppercase;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
-              padding: 0px 4px 12px;
+              padding: 0 4px 12px;
               box-sizing: border-box;
             }
           }

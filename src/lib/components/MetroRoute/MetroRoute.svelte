@@ -22,15 +22,17 @@
     districtPrefix = "d:",
     transferPrefix = "->",
     timePrefix = "t:",
-    speed = 11,
+    speed = 8,
     dwellTimeSeconds = 5,
   } = $props();
 
   let isAnnouncementActive = $state(false);
 
   $effect(() => {
-    if (!currentFeatureId && !headingToId)
-      return void (isAnnouncementActive = false);
+    if (!currentFeatureId && !headingToId) {
+      isAnnouncementActive = false;
+      return;
+    }
     isAnnouncementActive = true;
     const timer = setTimeout(
       () => (isAnnouncementActive = false),
@@ -39,7 +41,7 @@
     return () => clearTimeout(timer);
   });
 
-  function getPos(obj: Feature | Position | null): Position | null {
+  const getPos = (obj: Feature | Position | null): Position | null => {
     if (!obj) return null;
     if ("x" in obj) return obj as Position;
     if (obj.centerPosition) return obj.centerPosition;
@@ -51,35 +53,36 @@
       return { x: obj.centerX, y: obj.centerY, z: obj.centerZ };
     }
     return null;
-  }
+  };
 
-  function getDistance(
+  const getDistance = (
     a: Feature | Position | null,
     b: Feature | Position | null,
-  ): number {
+  ): number => {
     const p1 = getPos(a);
     const p2 = getPos(b);
     if (!p1 || !p2) return 0;
-    return Math.sqrt(
-      (p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2 + (p2.z - p1.z) ** 2,
-    );
-  }
+    return Math.hypot(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
+  };
 
   let idxMap = $derived(new Map(stations.map((s, i) => [s.id, i])));
   const getIdx = (id: string | null) => (id ? (idxMap.get(id) ?? -1) : -1);
 
-  const getTagString = (tag: Tag | string): string => {
-    return typeof tag === "string" ? tag : (tag.name ?? "");
-  };
+  const getTagString = (tag: Tag | string): string =>
+    typeof tag === "string" ? tag : (tag.name ?? "");
+
+  let tagRegexes = $derived({
+    district: new RegExp(`^${districtPrefix}`),
+    transfer: new RegExp(transferPrefix, "g"),
+    time: new RegExp(`^${timePrefix}`),
+  });
 
   const getDistrictName = (station: Feature): string | null => {
     const tag = station.tags?.find((t) =>
       getTagString(t).startsWith(districtPrefix),
     );
     return tag
-      ? getTagString(tag)
-          .replace(new RegExp(`^${districtPrefix}`), "")
-          .trim()
+      ? getTagString(tag).replace(tagRegexes.district, "").trim()
       : null;
   };
 
@@ -88,17 +91,13 @@
       getTagString(t).startsWith(timePrefix),
     );
     if (!tag) return null;
-    const val = getTagString(tag)
-      .replace(new RegExp(`^${timePrefix}`), "")
-      .trim();
+    const val = getTagString(tag).replace(tagRegexes.time, "").trim();
     return /^\d+$/.test(val) ? `${val}'` : val;
   };
 
-  let [currentIdx, nextIdx, lastLeftIdx] = $derived([
-    getIdx(currentFeatureId),
-    getIdx(headingToId),
-    getIdx(lastLeftFeatureId),
-  ]);
+  let currentIdx = $derived(getIdx(currentFeatureId));
+  let nextIdx = $derived(getIdx(headingToId));
+  let lastLeftIdx = $derived(getIdx(lastLeftFeatureId));
 
   let currentStation = $derived(stations[currentIdx]);
   let headingToStation = $derived(stations[nextIdx]);
@@ -116,15 +115,12 @@
   let activeTags = $derived(
     (mode === 1 ? currentStation : mode === 2 ? headingToStation : null)?.tags
       ?.filter((tag) => getTagString(tag).includes(transferPrefix))
-      .map((tag) => {
-        const str = getTagString(tag);
-        return {
-          name: str.replace(new RegExp(`${transferPrefix}`, "g"), "").trim(),
-          backgroundColor:
-            typeof tag === "object" ? tag.backgroundColor : undefined,
-          textColor: typeof tag === "object" ? tag.textColor : undefined,
-        };
-      }) ?? [],
+      .map((tag) => ({
+        name: getTagString(tag).replace(tagRegexes.transfer, "").trim(),
+        backgroundColor:
+          typeof tag === "object" ? tag.backgroundColor : undefined,
+        textColor: typeof tag === "object" ? tag.textColor : undefined,
+      })) ?? [],
   );
 
   let isForward = $derived(
@@ -136,7 +132,7 @@
   );
 
   let displayStations = $derived(
-    isForward ? stations : [...stations].reverse(),
+    isForward ? stations : stations.slice().reverse(),
   );
 
   let refIdx = $derived(
@@ -162,30 +158,24 @@
 
   let isOverflowing = $state(false);
 
-  function tickerObserver(node: HTMLElement, _text?: string) {
+  function tickerObserver(node: HTMLElement, fullText: string) {
     let resizeObs: ResizeObserver;
 
     async function update() {
       await tick();
       const span = node.querySelector<HTMLElement>(".ticker-content span");
       if (span) {
-        const textWidth = span.getBoundingClientRect().width;
-        const containerWidth = node.clientWidth;
-        isOverflowing = textWidth > containerWidth;
+        isOverflowing = span.getBoundingClientRect().width > node.clientWidth;
       }
     }
 
     update();
-
-    resizeObs = new ResizeObserver(() => update());
+    resizeObs = new ResizeObserver(update);
     resizeObs.observe(node);
-
     document.fonts?.ready.then(update);
 
     return {
-      update(_newText?: string) {
-        update();
-      },
+      update,
       destroy() {
         resizeObs.disconnect();
       },
@@ -198,6 +188,7 @@
 
     let accumulatedSeconds = 0;
     let prevPoint: Feature | Position | null = playerPosition;
+    const effectiveSpeed = Math.max(speed, 1);
 
     for (const station of displayStations) {
       const manualTime = getManualTime(station);
@@ -206,9 +197,7 @@
         continue;
       }
 
-      if (isPassed(station.id) && station.id !== currentFeatureId) {
-        continue;
-      }
+      if (isPassed(station.id) && station.id !== currentFeatureId) continue;
 
       if (station.id === currentFeatureId) {
         times.set(station.id, "0''");
@@ -218,14 +207,10 @@
       }
 
       const dist = getDistance(prevPoint, station);
-      const isFirstSegmentFromPlayer = prevPoint === playerPosition;
-
       accumulatedSeconds +=
-        dist / Math.max(speed, 1) +
-        (!isFirstSegmentFromPlayer ? dwellTimeSeconds : 0);
-
-      const mins = Math.floor(accumulatedSeconds);
-      times.set(station.id, `${mins}''`);
+        dist / effectiveSpeed +
+        (prevPoint !== playerPosition ? dwellTimeSeconds : 0);
+      times.set(station.id, `${Math.floor(accumulatedSeconds)}''`);
 
       prevPoint = station;
     }
@@ -246,17 +231,15 @@
       if (dName === currentDistrict) {
         count++;
       } else {
-        if (currentDistrict) {
+        if (currentDistrict)
           groups.push({ name: currentDistrict, startIndex, count });
-        }
         currentDistrict = dName;
         startIndex = i;
         count = 1;
       }
     }
-    if (currentDistrict) {
+    if (currentDistrict)
       groups.push({ name: currentDistrict, startIndex, count });
-    }
     return groups;
   });
 </script>
@@ -291,9 +274,7 @@
         </div>
       {:else}
         <div class="{mode === 1 ? 'current' : 'next'}-station mode">
-          <span class="title"
-            >{mode === 1 ? "THIS IS:" : "NEXT STATION:"}
-          </span>
+          <span class="title">{mode === 1 ? "THIS IS:" : "NEXT STATION:"}</span>
           <span class="content"
             >{(mode === 1 ? currentStation : headingToStation)?.name ??
               ""}</span
@@ -350,14 +331,11 @@
         {#if showDistricts}
           <div class="districts-bar">
             {#each districtGroups as group}
-              {@const isFirstStation = group.startIndex === 0}
-              {@const isLastStation =
-                group.startIndex + group.count === displayStations.length}
-
               <div
                 class="district-block"
-                class:is-first={isFirstStation}
-                class:is-last={isLastStation}
+                class:is-first={group.startIndex === 0}
+                class:is-last={group.startIndex + group.count ===
+                  displayStations.length}
                 style="left: calc((100% / {displayStations.length}) * {group.startIndex}); width: calc((100% / {displayStations.length}) * {group.count});"
               >
                 <span class="district-title">{group.name}</span>
