@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { Feature, Position, Tag } from "../../../models/PlayerRoute";
 
   interface DistrictGroup {
@@ -159,6 +160,38 @@
   let fullRouteText = $derived(upcomingStations.map((s) => s.name).join(" - "));
   let terminalStation = $derived(upcomingStations.at(-1)?.name ?? "");
 
+  let isOverflowing = $state(false);
+
+  function tickerObserver(node: HTMLElement, _text?: string) {
+    let resizeObs: ResizeObserver;
+
+    async function update() {
+      await tick();
+      const span = node.querySelector<HTMLElement>(".ticker-content span");
+      if (span) {
+        const textWidth = span.getBoundingClientRect().width;
+        const containerWidth = node.clientWidth;
+        isOverflowing = textWidth > containerWidth;
+      }
+    }
+
+    update();
+
+    resizeObs = new ResizeObserver(() => update());
+    resizeObs.observe(node);
+
+    document.fonts?.ready.then(update);
+
+    return {
+      update(_newText?: string) {
+        update();
+      },
+      destroy() {
+        resizeObs.disconnect();
+      },
+    };
+  }
+
   let calculatedTimes = $derived.by(() => {
     const times = new Map<string, string>();
     if (!showTime) return times;
@@ -241,11 +274,17 @@
         <div class="route-stats mode">
           <span class="title">-> {terminalStation}</span>
           <div class="route-checkpoints content">
-            Route:
-            <div class="ticker-wrap">
+            <span class="route-label">Route:</span>
+            <div
+              class="ticker-wrap"
+              use:tickerObserver={fullRouteText}
+              class:should-scroll={isOverflowing}
+            >
               <div class="ticker-content">
                 <span>{fullRouteText}</span>
-                <span>{fullRouteText}</span>
+                {#if isOverflowing}
+                  <span>{fullRouteText}</span>
+                {/if}
               </div>
             </div>
           </div>

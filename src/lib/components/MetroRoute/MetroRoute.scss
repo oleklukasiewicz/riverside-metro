@@ -13,10 +13,10 @@
 
 @keyframes marquee {
   0% {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
@@ -55,6 +55,7 @@
       padding: 0 12px;
       margin-top: -7px;
       line-height: 1;
+      min-width: 0;
 
       .mode {
         display: flex;
@@ -78,6 +79,8 @@
           align-items: center;
           font-size: 25px;
           font-family: minecraft-simple;
+          width: 100%;
+          overflow: hidden;
 
           .route-label {
             margin-right: 8px;
@@ -89,22 +92,28 @@
             flex: 1;
             min-width: 0;
             overflow: hidden;
-            display: flex;
-            margin-left: 8px;
+            position: relative;
 
             .ticker-content {
-              display: flex;
+              display: inline-flex;
               white-space: nowrap;
               width: max-content;
-              animation: marquee 15s linear infinite;
 
               span {
-                padding-right: 16px;
+                display: inline-block;
+                padding-right: 8rem;
+                flex-shrink: 0;
               }
             }
 
-            &:hover .ticker-content {
-              animation-play-state: paused;
+            &.should-scroll {
+              .ticker-content {
+                animation: marquee 15s linear infinite;
+              }
+
+              &:hover .ticker-content {
+                animation-play-state: paused;
+              }
             }
           }
         }
@@ -142,11 +151,13 @@
     flex: 1;
     display: flex;
     align-items: center;
+
     .metro-display {
       width: 100%;
       background-color: var(--color-theme-D1);
-      padding: 120px 40px 80px 0;
+      padding: 120px 40px 60px 0;
       box-sizing: border-box;
+
       .line-map {
         display: flex;
         position: relative;
@@ -239,7 +250,7 @@
 
           .station-time {
             position: absolute;
-            top: 20px;
+            top: 18px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -250,7 +261,7 @@
             text-align: center;
             white-space: nowrap;
             font-size: 32px;
-            font-family: DMDsmall, sans-serif;
+            font-family: DMDSmall, sans-serif;
             color: var(--color-hover-L1);
             z-index: 6;
             pointer-events: none;
