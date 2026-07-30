@@ -16,6 +16,16 @@
   100% { transform: translate3d(-50%, 0, 0); }
 }
 
+@keyframes arrow-flow-right {
+  0% { transform: translate3d(-24px, 0, 0); }
+  100% { transform: translate3d(0px, 0, 0); }
+}
+
+@keyframes arrow-flow-left {
+  0% { transform: scaleX(-1) translate3d(-24px, 0, 0); }
+  100% { transform: scaleX(-1) translate3d(0px, 0, 0); }
+}
+
 .metro-route {
   flex: 1;
   color: var(--color-theme-font);
@@ -33,6 +43,41 @@
     grid-template-columns: auto 1fr;
     border-bottom: 2px solid var(--color-theme-D6);
     overflow: hidden;
+
+    .platform-indicator {
+      width: 52px;
+      height: 52px;
+      background-color: var(--platform-bg, #bd3218);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+
+      .arrow-stream {
+        display: flex;
+        gap: 4px;
+        position: absolute;
+        white-space: nowrap;
+        will-change: transform;
+
+        .pixel-arrow {
+          height: 32px;
+          width: 20px;
+          flex-shrink: 0;
+          image-rendering: pixelated;
+          filter: brightness(0) invert(1);
+        }
+      }
+
+      &.plat-r .arrow-stream {
+        animation: arrow-flow-right 0.8s linear infinite;
+      }
+
+      &.plat-l .arrow-stream {
+        animation: arrow-flow-left 0.8s linear infinite;
+      }
+    }
 
     .route-name {
       aspect-ratio: 1;

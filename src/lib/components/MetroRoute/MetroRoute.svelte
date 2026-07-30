@@ -16,6 +16,7 @@
     lastLeftFeatureId = null as string | null,
     playerPosition = null as Position | null,
     lineColor = "#666666",
+    lineTextColor = "#ffffff",
     annoucementDuration = 5000,
     showDistricts = true,
     showTime = true,
@@ -130,6 +131,20 @@
         ? nextIdx >= currentIdx
         : nextIdx > 0 || nextIdx === -1,
   );
+
+  // Wykrywanie strony peronu z tagów plat:l lub plat:r z uwzględnieniem kierunku pociągu
+  let platformSide = $derived.by(() => {
+    if (mode === 0) return null;
+    const activeStation = mode === 1 ? currentStation : headingToStation;
+    if (!activeStation?.tags) return null;
+
+    const tags = activeStation.tags.map(getTagString);
+    let side: "l" | "r" | null = "l";
+
+    if (tags.includes("plat:l")) side = "l";
+    else if (tags.includes("plat:r")) side = "r";
+    return side;
+  });
 
   let displayStations = $derived(
     isForward ? stations : stations.slice().reverse(),
@@ -246,12 +261,28 @@
 
 <div class="metro-route">
   <div class="header">
-    <div
-      class="route-name"
-      style="background-color: {lineColor}; color: white;"
-    >
-      <span>{routeName}</span>
-    </div>
+    {#if mode === 1 && platformSide}
+      <div
+        class="platform-indicator plat-{platformSide}"
+        style="background-color: {lineColor}; color: {lineTextColor};"
+      >
+        <div class="arrow-stream">
+          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
+          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
+          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
+          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
+          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
+        </div>
+      </div>
+    {:else}
+      <div
+        class="route-name"
+        style="background-color: {lineColor}; color: {lineTextColor};"
+      >
+        <span>{routeName}</span>
+      </div>
+    {/if}
+
     <div class="route-info">
       {#if mode === 0}
         <div class="route-stats mode">
