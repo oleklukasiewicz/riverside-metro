@@ -271,7 +271,6 @@
           <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
           <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
           <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
-          <img src="/icon/arrow.svg" alt="Platform Arrow" class="pixel-arrow" />
         </div>
       </div>
     {:else}
