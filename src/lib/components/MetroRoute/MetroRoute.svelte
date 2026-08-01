@@ -316,7 +316,27 @@
 
   <div class="transfers">
     {#if activeTags.length > 0}
-      <span>-></span>
+      <span
+        ><svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 19 19"
+          width="38"
+          height="38"
+          shape-rendering="crispEdges"
+        >
+          <path
+            fill="currentColor"
+            d="M1 6h7v7H1zM2 7h5v5H2z"
+            fill-rule="evenodd"
+          />
+          <path fill="currentColor" d="M3 8h3v3H3z" />
+          <path fill="currentColor" d="M8 9h4v1H8z" />
+          <path
+            fill="currentColor"
+            d="M12 6h1v7h-1z M13 7h1v5h-1z M14 8h1v3h-1z M15 9h1v1h-1z"
+          />
+        </svg>
+      </span>
       {#each activeTags as tag}
         {#if tag.name}
           <div

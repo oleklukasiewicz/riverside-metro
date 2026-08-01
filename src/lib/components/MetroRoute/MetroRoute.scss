@@ -12,18 +12,30 @@
 }
 
 @keyframes marquee {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
 }
 
 @keyframes arrow-flow-right {
-  0% { transform: translate3d(-24px, 0, 0); }
-  100% { transform: translate3d(0px, 0, 0); }
+  0% {
+    transform: translate3d(-24px, 0, 0);
+  }
+  100% {
+    transform: translate3d(0px, 0, 0);
+  }
 }
 
 @keyframes arrow-flow-left {
-  0% { transform: scaleX(-1) translate3d(-24px, 0, 0); }
-  100% { transform: scaleX(-1) translate3d(0px, 0, 0); }
+  0% {
+    transform: scaleX(-1) translate3d(-24px, 0, 0);
+  }
+  100% {
+    transform: scaleX(-1) translate3d(0px, 0, 0);
+  }
 }
 
 .metro-route {
@@ -167,7 +179,10 @@
     border-bottom: 2px solid var(--color-theme-D6);
 
     > span {
-      transform: translateY(-3px);
+      svg {
+        transform: translateY(-5px);
+        color: var(--color-theme-font);
+      }
     }
 
     .transfer-badge {
@@ -264,7 +279,7 @@
           }
 
           &.is-terminal .station-name {
-            font-size: 40px;
+            font-size: 42px;
           }
 
           .node-cutout {
