@@ -11,7 +11,7 @@
   import TextBox from "$lib/components/TextBox/TextBox.svelte";
   import Button from "$lib/components/Button/Button.svelte";
 
-  let connection: signalR.HubConnection;
+  let connection: signalR.HubConnection | null = null;
   let status = $state("Disconnected");
   let targetUsername = $state("");
   let trackedUsername = $state("");
@@ -70,18 +70,68 @@
     routeData.playerPosition = data.position?.actualPosition ?? null;
   }
 
-  async function startTracking() {
-    if (
-      !targetUsername.trim() ||
-      connection?.state !== signalR.HubConnectionState.Connected
-    )
-      return;
+  function registerConnectionHandlers() {
+    if (!connection) return;
 
-    if (trackedUsername) {
-      await connection.invoke("UntrackUser", trackedUsername);
+    connection.on("OnStation", (rawPayload) => {
+      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
+      updateRouteState(data);
+    });
+
+    connection.on("OnNextStation", (rawPayload) => {
+      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
+      updateRouteState(data);
+    });
+
+    connection.on("OnRouteLeave", (rawPayload) => {
+      if (routeData.routeName === rawPayload?.playerRoute?.route?.name) {
+        routeData.currentFeatureId = null;
+        routeData.headingToId = null;
+        routeData.lastLeftFeatureId = null;
+      }
+    });
+
+    connection.on("OnPositionUpdate", (rawPayload) => {
+      const data: PlayerPosition = rawPayload?.playerPosition ?? rawPayload;
+      routeData.playerPosition = data?.actualPosition ?? null;
+    });
+  }
+
+  async function ensureConnection() {
+    if (connection?.state === signalR.HubConnectionState.Connected) return connection;
+
+    if (!connection) {
+      connection = new signalR.HubConnectionBuilder()
+        .withUrl(gpsAapi)
+        .withAutomaticReconnect()
+        .build();
+      registerConnectionHandlers();
     }
 
-    await connection.invoke("TrackUser", targetUsername.trim());
+    try {
+      if (connection.state === signalR.HubConnectionState.Disconnected) {
+        await connection.start();
+      }
+      status = "Connected";
+      return connection;
+    } catch (err) {
+      status = "Error connecting";
+      console.error(err);
+      return null;
+    }
+  }
+
+  async function startTracking() {
+    if (!targetUsername.trim()) return;
+
+    const activeConnection = await ensureConnection();
+    if (!activeConnection) return;
+
+    if (trackedUsername) {
+      await activeConnection.invoke("UntrackUser", trackedUsername);
+    }
+
+    await activeConnection.invoke("TrackUser", targetUsername.trim());
     trackedUsername = targetUsername.trim();
   }
 
@@ -149,47 +199,6 @@
       window.location.hostname === "127.0.0.1"
     ) {
       gpsAapi = "https://localhost:7194/routeHub";
-    }
-
-    connection = new signalR.HubConnectionBuilder()
-      .withUrl(gpsAapi)
-      .withAutomaticReconnect()
-      .build();
-
-    connection.on("OnStation", (rawPayload) => {
-      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      updateRouteState(data);
-      // if (data?.currentFeature) {
-      //   playAnnouncement("stacja.mp3", data.currentFeature.name);
-      // }
-    });
-
-    connection.on("OnNextStation", (rawPayload) => {
-      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      updateRouteState(data);
-      // if (data?.headingTo) {
-      //   playAnnouncement("nastepna_stacja.mp3", data.headingTo.name);
-      // }
-    });
-
-    connection.on("OnRouteLeave", (rawPayload) => {
-      if (routeData.routeName === rawPayload?.playerRoute?.route?.name) {
-        routeData.currentFeatureId = null;
-        routeData.headingToId = null;
-        routeData.lastLeftFeatureId = null;
-      }
-    });
-    connection.on("OnPositionUpdate", (rawPayload) => {
-      const data: PlayerPosition = rawPayload?.playerPosition ?? rawPayload;
-      routeData.playerPosition = data?.actualPosition ?? null;
-    });
-
-    try {
-      await connection.start();
-      status = "Connected";
-    } catch (err) {
-      status = "Error connecting";
-      console.error(err);
     }
   });
 
