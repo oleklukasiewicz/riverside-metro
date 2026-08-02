@@ -101,8 +101,9 @@
     if (connection?.state === signalR.HubConnectionState.Connected) return connection;
 
     if (!connection) {
+      // prefer Server-Sent Events transport; fall back to LongPolling if SSE fails
       connection = new signalR.HubConnectionBuilder()
-        .withUrl(gpsAapi)
+        .withUrl(gpsAapi, { transport: signalR.HttpTransportType.ServerSentEvents })
         .withAutomaticReconnect()
         .build();
       registerConnectionHandlers();
@@ -115,9 +116,22 @@
       status = "Connected";
       return connection;
     } catch (err) {
-      status = "Error connecting";
-      console.error(err);
-      return null;
+      console.warn("SSE start failed, trying LongPolling fallback", err);
+      // Try fallback to LongPolling
+      try {
+        connection = new signalR.HubConnectionBuilder()
+          .withUrl(gpsAapi, { transport: signalR.HttpTransportType.LongPolling })
+          .withAutomaticReconnect()
+          .build();
+        registerConnectionHandlers();
+        await connection.start();
+        status = "Connected";
+        return connection;
+      } catch (err2) {
+        status = "Error connecting";
+        console.error(err2);
+        return null;
+      }
     }
   }
 
