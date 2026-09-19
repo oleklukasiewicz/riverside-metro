@@ -21,7 +21,7 @@
     showDistricts = true,
     showTime = true,
     districtPrefix = "d:",
-    transferPrefix = "->",
+    transferPrefix = "tr:",
     timePrefix = "t:",
     speed = 8,
     dwellTimeSeconds = 5,

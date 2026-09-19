@@ -35,7 +35,7 @@
   function extractLineColor(tags: any[]): string {
     if (!Array.isArray(tags)) return "#666666";
     const transferTag = tags.find((t) =>
-      (typeof t === "string" ? t : t.name)?.includes("->"),
+      (typeof t === "string" ? t : t.name)?.includes("tr:"),
     );
     return typeof transferTag === "object"
       ? transferTag?.backgroundColor || "#666666"
