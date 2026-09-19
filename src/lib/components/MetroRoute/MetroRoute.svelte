@@ -316,8 +316,7 @@
 
   <div class="transfers">
     {#if activeTags.length > 0}
-      <span
-        >
+      <span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 19 19"
@@ -387,7 +386,7 @@
                 class:is-first={group.startIndex === 0}
                 class:is-last={group.startIndex + group.count ===
                   displayStations.length}
-                style="left: calc((100% / {displayStations.length}) * {group.startIndex}); width: calc((100% / {displayStations.length}) * {group.count});"
+                style="--start-idx: {group.startIndex}; --span-count: {group.count};"
               >
                 <span class="district-title">{group.name}</span>
               </div>

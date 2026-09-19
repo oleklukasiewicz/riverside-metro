@@ -352,6 +352,12 @@
             padding: 0 1px;
             box-sizing: border-box;
 
+            // Pobiera zmienne ze Svelte dla poziomego layoutu
+            left: calc((100% / var(--total-stations, 6)) * var(--start-idx, 0));
+            width: calc(
+              (100% / var(--total-stations, 6)) * var(--span-count, 1)
+            );
+
             &.is-first {
               padding-left: calc((100% / var(--total-stations, 6) / 2) - 10px);
             }
@@ -374,6 +380,99 @@
               padding: 0 4px 12px;
               box-sizing: border-box;
             }
+          }
+        }
+      }
+    }
+  }
+}
+@media (max-width: 500px) {
+  .metro-route .route .metro-display {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+
+    .line-map {
+      flex-direction: column;
+      height: 100%;
+      --line-offset: 55%;
+      
+      &::before {
+        width: 6px;
+        height: auto;
+        top: calc(100% / var(--total-stations, 6) / 2);
+        bottom: calc(100% / var(--total-stations, 6) / 2);
+        left: var(--line-offset);
+        right: auto;
+        transform: translateX(-50%);
+      }
+
+      .station-item {
+        width: 100%;
+        height: auto;
+        flex: 1;
+
+        &::after {
+          width: 6px;
+          height: 100%;
+          top: -50%;
+          left: var(--line-offset);
+          transform: translateX(-50%);
+        }
+
+        .node-cutout, 
+        .node {
+          left: var(--line-offset);
+        }
+
+        .station-name {
+          bottom: auto;
+          left: calc(var(--line-offset) + 20px);
+          top: 50%;
+          transform: translateY(-50%);
+          white-space: nowrap;
+        }
+
+        .station-time {
+          top: 50%;
+          left: auto;
+          right: calc(100% - var(--line-offset) + 15px);
+          transform: translateY(-50%);
+        }
+      }
+
+      .districts-bar {
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: auto;
+        width: 30%;
+        height: 100%;
+
+        .district-block {
+          position: absolute;
+          left: 0;
+          width: 100%;
+          top: calc((100% / var(--total-stations, 6)) * var(--start-idx, 0));
+          height: calc((100% / var(--total-stations, 6)) * var(--span-count, 1));
+          padding: 1px 0;
+
+          &.is-first {
+            padding-left: 0;
+            padding-top: calc((100% / var(--total-stations, 6) / 2) - 10px);
+          }
+          &.is-last {
+            padding-right: 0;
+            padding-bottom: calc((100% / var(--total-stations, 6) / 2) - 10px);
+          }
+
+          .district-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            padding: 0;
           }
         }
       }

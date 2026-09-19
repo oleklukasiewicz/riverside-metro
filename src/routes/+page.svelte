@@ -191,7 +191,7 @@
       pipWindow.document.body.appendChild(metroContainer);
       pipWindow.document.body.style.margin = "0";
       pipWindow.document.body.style.display = "flex";
-      pipWindow.document.body.style.minHeight = "100vh";
+      pipWindow.document.body.style.height = "100vh";
       isPipActive = true;
 
       pipWindow.addEventListener("pagehide", () => {
