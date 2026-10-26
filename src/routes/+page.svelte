@@ -5,6 +5,7 @@
   import type {
     PlayerRoute,
     Feature,
+    Tag,
     Position,
     PlayerPosition,
   } from "../models/PlayerRoute";
@@ -19,6 +20,12 @@
   let metroContainer = $state<HTMLElement | null>(null);
   let pipWindow = $state<Window | null>(null);
   let isPipActive = $state(false);
+  type AudioQueueItem = { filename: string } | { delayMs: number };
+  let audioQueue: AudioQueueItem[] = [];
+  let isPlayingAudio = false;
+  let announcedStationId: string | null = null;
+  let announcedNextStationId: string | null = null;
+  const audioBasePath = "/audio/";
 
   let gpsAapi = "/api/routeHub";
 
@@ -42,24 +49,93 @@
       : "#666666";
   }
 
+  function getTagString(tag: Tag | string): string {
+    return typeof tag === "string" ? tag : (tag.name ?? "");
+  }
+
+  function getTaggedAudioFiles(station: Feature | null, prefix: string): string[] {
+    if (!station?.tags) return [];
+
+    return station.tags
+      .filter((tag) => getTagString(tag).startsWith(`${prefix}:`))
+      .flatMap((tag) => getTagString(tag).slice(prefix.length + 1).split(","))
+      .map((filename) => filename.trim())
+      .filter(Boolean);
+  }
+
+  function getStationAudioFiles(station: Feature | null): string[] {
+    return getTaggedAudioFiles(station, "s");
+  }
+
+  function getNextStationAudioFiles(station: Feature | null): string[] {
+    return getTaggedAudioFiles(station, "cs");
+  }
+
   function playAudioFile(filename: string): Promise<void> {
     return new Promise((resolve) => {
-      const audio = new Audio(`/audio/${filename}`);
+      const audio = new Audio(
+        `${audioBasePath}${filename.replace(/\\/g, "/")}`,
+      );
       audio.onended = () => resolve();
       audio.onerror = () => resolve();
       audio.play().catch(() => resolve());
     });
   }
 
-  async function playAnnouncement(prefixFile: string, stationName: string) {
-    const formattedName = stationName.toLowerCase().replace(/\s+/g, "_");
-    await playAudioFile(prefixFile);
-    await playAudioFile(`${formattedName}.mp3`);
+  async function processAudioQueue() {
+    if (isPlayingAudio) return;
+
+    isPlayingAudio = true;
+    try {
+      while (audioQueue.length > 0) {
+        const item = audioQueue.shift();
+        if (!item) continue;
+
+        if ("delayMs" in item) {
+          await new Promise((resolve) => setTimeout(resolve, item.delayMs));
+        } else {
+          await playAudioFile(item.filename);
+        }
+      }
+    } finally {
+      isPlayingAudio = false;
+    }
   }
 
-  function updateRouteState(rawPayload: any) {
+  function isTerminusStation(station: Feature | null): boolean {
+    if (!station || routeData.stations.length < 2) return false;
+
+    const firstStation = routeData.stations[0];
+    const lastStation = routeData.stations.at(-1);
+    return station.id === firstStation?.id || station.id === lastStation?.id;
+  }
+
+  function playStationAudio(station: Feature | null) {
+    const files = getStationAudioFiles(station);
+    const isTerminus = isTerminusStation(station);
+    if (files.length === 0 && !isTerminus) return;
+
+    audioQueue.push(...files.map((filename) => ({ filename })));
+    if (isTerminus) {
+      audioQueue.push({ delayMs: 2000 }, { filename: "terminus.wav" });
+    }
+    void processAudioQueue();
+  }
+
+  function playNextStationAudio(station: Feature | null) {
+    if (!station) return;
+
+    const files = getNextStationAudioFiles(station);
+    audioQueue.push(
+      { filename: "next_station.wav" },
+      ...files.map((filename) => ({ filename })),
+    );
+    void processAudioQueue();
+  }
+
+  function updateRouteState(rawPayload: any): PlayerRoute | null {
     const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-    if (!data?.route) return;
+    if (!data?.route) return null;
 
     routeData.stations = data.route.checkpoints || [];
     routeData.routeName = data.route.name || "M1";
@@ -68,6 +144,8 @@
     routeData.headingToId = data.headingTo?.id ?? null;
     routeData.lastLeftFeatureId = data.lastLeftFeatureId ?? null;
     routeData.playerPosition = data.position?.actualPosition ?? null;
+
+    return data;
   }
 
   function registerConnectionHandlers() {
@@ -75,12 +153,28 @@
 
     connection.on("OnStation", (rawPayload) => {
       const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      updateRouteState(data);
+      const updatedRoute = updateRouteState(data);
+      const stationId = updatedRoute?.currentFeature?.id ?? null;
+
+      if (updatedRoute && stationId && stationId !== announcedStationId) {
+        announcedStationId = stationId;
+        playStationAudio(updatedRoute.currentFeature);
+      }
     });
 
     connection.on("OnNextStation", (rawPayload) => {
       const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      updateRouteState(data);
+      const updatedRoute = updateRouteState(data);
+      const nextStationId = updatedRoute?.headingTo?.id ?? null;
+
+      if (
+        updatedRoute &&
+        nextStationId &&
+        nextStationId !== announcedNextStationId
+      ) {
+        announcedNextStationId = nextStationId;
+        playNextStationAudio(updatedRoute.headingTo);
+      }
     });
 
     connection.on("OnRouteLeave", (rawPayload) => {
@@ -88,6 +182,8 @@
         routeData.currentFeatureId = null;
         routeData.headingToId = null;
         routeData.lastLeftFeatureId = null;
+        announcedStationId = null;
+        announcedNextStationId = null;
       }
     });
 
