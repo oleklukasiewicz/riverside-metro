@@ -12,21 +12,22 @@
   import TextBox from "$lib/components/TextBox/TextBox.svelte";
   import Button from "$lib/components/Button/Button.svelte";
 
+  type HelloResponse =
+    | boolean
+    | { isTracked?: boolean; tracked?: boolean }
+    | null;
+  type AudioQueueItem = { filename: string } | { delayMs: number };
+
   let connection: signalR.HubConnection | null = null;
   let status = $state("Disconnected");
   let targetUsername = $state("");
   let trackedUsername = $state("");
   let trackingMessage = $state("");
   let isCheckingTracking = $state(false);
-  type HelloResponse =
-    | boolean
-    | { isTracked?: boolean; tracked?: boolean }
-    | null;
 
   let metroContainer = $state<HTMLElement | null>(null);
   let pipWindow = $state<Window | null>(null);
   let isPipActive = $state(false);
-  type AudioQueueItem = { filename: string } | { delayMs: number };
   let audioQueue: AudioQueueItem[] = [];
   let isPlayingAudio = false;
   let announcedStationId: string | null = null;
@@ -59,22 +60,15 @@
     return typeof tag === "string" ? tag : (tag.name ?? "");
   }
 
-  function getTaggedAudioFiles(station: Feature | null, prefix: string): string[] {
-    if (!station?.tags) return [];
-
-    return station.tags
+  function getTaggedAudioFiles(
+    station: Feature | null,
+    prefix: string,
+  ): string[] {
+    return (station?.tags ?? [])
       .filter((tag) => getTagString(tag).startsWith(`${prefix}:`))
       .flatMap((tag) => getTagString(tag).slice(prefix.length + 1).split(","))
       .map((filename) => filename.trim())
       .filter(Boolean);
-  }
-
-  function getStationAudioFiles(station: Feature | null): string[] {
-    return getTaggedAudioFiles(station, "s");
-  }
-
-  function getNextStationAudioFiles(station: Feature | null): string[] {
-    return getTaggedAudioFiles(station, "cs");
   }
 
   function playAudioFile(filename: string): Promise<void> {
@@ -82,8 +76,7 @@
       const audio = new Audio(
         `${audioBasePath}${filename.replace(/\\/g, "/")}`,
       );
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
+      audio.onended = audio.onerror = () => resolve();
       audio.play().catch(() => resolve());
     });
   }
@@ -97,11 +90,9 @@
         const item = audioQueue.shift();
         if (!item) continue;
 
-        if ("delayMs" in item) {
-          await new Promise((resolve) => setTimeout(resolve, item.delayMs));
-        } else {
-          await playAudioFile(item.filename);
-        }
+        await ("delayMs" in item
+          ? new Promise((resolve) => setTimeout(resolve, item.delayMs))
+          : playAudioFile(item.filename));
       }
     } finally {
       isPlayingAudio = false;
@@ -116,27 +107,32 @@
     return station.id === firstStation?.id || station.id === lastStation?.id;
   }
 
+  function enqueueAudio(...items: AudioQueueItem[]) {
+    audioQueue.push(...items);
+    void processAudioQueue();
+  }
+
   function playStationAudio(station: Feature | null) {
-    const files = getStationAudioFiles(station);
+    const files = getTaggedAudioFiles(station, "s");
     const isTerminus = isTerminusStation(station);
     if (files.length === 0 && !isTerminus) return;
 
-    audioQueue.push(...files.map((filename) => ({ filename })));
-    if (isTerminus) {
-      audioQueue.push({ delayMs: 2000 }, { filename: "terminus.wav" });
-    }
-    void processAudioQueue();
+    enqueueAudio(
+      ...files.map((filename) => ({ filename })),
+      ...(isTerminus
+        ? [{ delayMs: 2000 }, { filename: "terminus.wav" }]
+        : []),
+    );
   }
 
   function playNextStationAudio(station: Feature | null) {
     if (!station) return;
 
-    const files = getNextStationAudioFiles(station);
-    audioQueue.push(
+    const files = getTaggedAudioFiles(station, "cs");
+    enqueueAudio(
       { filename: "next_station.wav" },
       ...files.map((filename) => ({ filename })),
     );
-    void processAudioQueue();
   }
 
   function updateRouteState(rawPayload: any): PlayerRoute | null {
@@ -154,43 +150,54 @@
     return data;
   }
 
+  function resetRouteState() {
+    routeData.currentFeatureId = null;
+    routeData.headingToId = null;
+    routeData.lastLeftFeatureId = null;
+    announcedStationId = null;
+    announcedNextStationId = null;
+  }
+
+  function getPayload<T>(rawPayload: any): T {
+    return rawPayload?.playerRoute ?? rawPayload;
+  }
+
+  function handleStationUpdate(
+    rawPayload: any,
+    type: "current" | "next",
+  ) {
+    const route = updateRouteState(getPayload<PlayerRoute>(rawPayload));
+    if (!route) return;
+
+    const station = type === "current" ? route.currentFeature : route.headingTo;
+    const stationId = station?.id ?? null;
+    const announcedId =
+      type === "current" ? announcedStationId : announcedNextStationId;
+
+    if (!stationId || stationId === announcedId) return;
+
+    if (type === "current") {
+      announcedStationId = stationId;
+      playStationAudio(station);
+    } else {
+      announcedNextStationId = stationId;
+      playNextStationAudio(station);
+    }
+  }
+
   function registerConnectionHandlers() {
     if (!connection) return;
 
-    connection.on("OnStation", (rawPayload) => {
-      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      const updatedRoute = updateRouteState(data);
-      const stationId = updatedRoute?.currentFeature?.id ?? null;
-
-      if (updatedRoute && stationId && stationId !== announcedStationId) {
-        announcedStationId = stationId;
-        playStationAudio(updatedRoute.currentFeature);
-      }
-    });
-
-    connection.on("OnNextStation", (rawPayload) => {
-      const data: PlayerRoute = rawPayload?.playerRoute ?? rawPayload;
-      const updatedRoute = updateRouteState(data);
-      const nextStationId = updatedRoute?.headingTo?.id ?? null;
-
-      if (
-        updatedRoute &&
-        nextStationId &&
-        nextStationId !== announcedNextStationId
-      ) {
-        announcedNextStationId = nextStationId;
-        playNextStationAudio(updatedRoute.headingTo);
-      }
-    });
+    connection.on("OnStation", (payload) =>
+      handleStationUpdate(payload, "current"),
+    );
+    connection.on("OnNextStation", (payload) =>
+      handleStationUpdate(payload, "next"),
+    );
 
     connection.on("OnRouteLeave", (rawPayload) => {
-      if (routeData.routeName === rawPayload?.playerRoute?.route?.name) {
-        routeData.currentFeatureId = null;
-        routeData.headingToId = null;
-        routeData.lastLeftFeatureId = null;
-        announcedStationId = null;
-        announcedNextStationId = null;
-      }
+      const route = getPayload<PlayerRoute>(rawPayload);
+      if (routeData.routeName === route?.route?.name) resetRouteState();
     });
 
     connection.on("OnPositionUpdate", (rawPayload) => {
@@ -199,39 +206,41 @@
     });
   }
 
-  async function ensureConnection() {
-    if (connection?.state === signalR.HubConnectionState.Connected) return connection;
+  function createConnection(transport: signalR.HttpTransportType) {
+    connection = new signalR.HubConnectionBuilder()
+      .withUrl(gpsAapi, { transport })
+      .withAutomaticReconnect()
+      .build();
+    registerConnectionHandlers();
+    return connection;
+  }
 
-    if (!connection) {
-      // prefer Server-Sent Events transport; fall back to LongPolling if SSE fails
-      connection = new signalR.HubConnectionBuilder()
-        .withUrl(gpsAapi, { transport: signalR.HttpTransportType.ServerSentEvents })
-        .withAutomaticReconnect()
-        .build();
-      registerConnectionHandlers();
+  async function ensureConnection() {
+    if (connection?.state === signalR.HubConnectionState.Connected) {
+      return connection;
     }
 
     try {
-      if (connection.state === signalR.HubConnectionState.Disconnected) {
-        await connection.start();
+      const activeConnection =
+        connection ??
+        createConnection(signalR.HttpTransportType.ServerSentEvents);
+      if (activeConnection.state === signalR.HubConnectionState.Disconnected) {
+        await activeConnection.start();
       }
       status = "Connected";
-      return connection;
-    } catch (err) {
-      console.warn("SSE start failed, trying LongPolling fallback", err);
-      // Try fallback to LongPolling
+      return activeConnection;
+    } catch (error) {
+      console.warn("SSE start failed, trying LongPolling fallback", error);
       try {
-        connection = new signalR.HubConnectionBuilder()
-          .withUrl(gpsAapi, { transport: signalR.HttpTransportType.LongPolling })
-          .withAutomaticReconnect()
-          .build();
-        registerConnectionHandlers();
-        await connection.start();
+        const fallbackConnection = createConnection(
+          signalR.HttpTransportType.LongPolling,
+        );
+        await fallbackConnection.start();
         status = "Connected";
-        return connection;
-      } catch (err2) {
+        return fallbackConnection;
+      } catch (fallbackError) {
         status = "Error connecting";
-        console.error(err2);
+        console.error(fallbackError);
         return null;
       }
     }
