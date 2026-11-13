@@ -16,6 +16,12 @@
   let status = $state("Disconnected");
   let targetUsername = $state("");
   let trackedUsername = $state("");
+  let trackingMessage = $state("");
+  let isCheckingTracking = $state(false);
+  type HelloResponse =
+    | boolean
+    | { isTracked?: boolean; tracked?: boolean }
+    | null;
 
   let metroContainer = $state<HTMLElement | null>(null);
   let pipWindow = $state<Window | null>(null);
@@ -232,17 +238,51 @@
   }
 
   async function startTracking() {
-    if (!targetUsername.trim()) return;
+    const username = targetUsername.trim();
+    if (!username) return;
 
     const activeConnection = await ensureConnection();
     if (!activeConnection) return;
 
-    if (trackedUsername) {
-      await activeConnection.invoke("UntrackUser", trackedUsername);
-    }
+    try {
+      if (trackedUsername && trackedUsername !== username) {
+        await activeConnection.invoke("UntrackUser", trackedUsername);
+        trackedUsername = "";
+      }
 
-    await activeConnection.invoke("TrackUser", targetUsername.trim());
-    trackedUsername = targetUsername.trim();
+      await activeConnection.invoke("TrackUser", username);
+      isCheckingTracking = true;
+      trackingMessage = "";
+
+      const helloResponse = await activeConnection.invoke<HelloResponse>(
+        "Hello",
+        username,
+      );
+      const isTracked =
+        typeof helloResponse === "boolean"
+          ? helloResponse
+          : helloResponse?.isTracked ?? helloResponse?.tracked ?? null;
+
+      if (isTracked === false) {
+        trackedUsername = "";
+        trackingMessage = `Player "${username}" is not being tracked. Please use /map show in-game and try again.`;
+        return;
+      }
+
+      if (isTracked === true) {
+        trackedUsername = username;
+        trackingMessage = "";
+        return;
+      }
+
+      throw new Error("Invalid response from the Hello method.");
+    } catch (error) {
+      trackedUsername = "";
+      trackingMessage = `Unable to check player "${username}".`;
+      console.error("Tracking check failed", error);
+    } finally {
+      isCheckingTracking = false;
+    }
   }
 
   async function togglePictureInPicture() {
@@ -299,7 +339,7 @@
         isPipActive = false;
       });
     } catch (err) {
-      console.error("Błąd Picture-in-Picture:", err);
+      console.error("Picture-in-picture error:", err);
     }
   }
 
@@ -328,8 +368,11 @@
         placeholder="Username"
         oninput={() => (targetUsername = targetUsername.trim())}
       />
-      <Button onclick={startTracking} disabled={!targetUsername.trim()}>
-        Track
+      <Button
+        onclick={startTracking}
+        disabled={!targetUsername.trim() || isCheckingTracking}
+      >
+        {isCheckingTracking ? "Checking..." : "Track"}
       </Button>
       <Button onclick={togglePictureInPicture}>
         {isPipActive ? "Close PiP" : "Open PiP"}
@@ -338,6 +381,11 @@
     {#if trackedUsername}
       <p style="margin-top: 0.5rem; color: green; font-size: 0.9rem;">
         Tracking: <strong>{trackedUsername}</strong>
+      </p>
+    {/if}
+    {#if trackingMessage}
+      <p style="margin-top: 0.5rem; color: #b42318; font-size: 0.9rem;">
+        {trackingMessage}
       </p>
     {/if}
   </div>
